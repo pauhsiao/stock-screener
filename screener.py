@@ -25,8 +25,8 @@ HOT_STOCKS = {
 # ── 工具函式 ────────────────────────────────────────────────────
 
 def fm_get(dataset, start, stock_id):
-    # No token: unauthenticated pool avoids per-account 600/day quota
-    url = f"{FM_BASE}?dataset={dataset}&data_id={stock_id}&start_date={start}"
+    url = (f"{FM_BASE}?dataset={dataset}&data_id={stock_id}"
+           f"&start_date={start}&token={FINMIND_TOKEN}")
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
@@ -35,15 +35,27 @@ def fm_get(dataset, start, stock_id):
         print(f"  [warn] {dataset} {stock_id}: {e}", file=sys.stderr)
         return []
 
-def get_stock_name(stock_id):
-    url = f"{FM_BASE}?dataset=TaiwanStockInfo&data_id={stock_id}"
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+# 一次從 TWSE 取得全市場股票名稱對照表（不需 token）
+_STOCK_NAMES: dict = {}
+
+def load_stock_names():
+    global _STOCK_NAMES
+    if _STOCK_NAMES:
+        return
     try:
+        url = "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=15) as r:
-            data = json.loads(r.read()).get("data", [])
-            return data[0]["stock_name"] if data else stock_id
-    except Exception:
-        return stock_id
+            data = json.loads(r.read())
+        _STOCK_NAMES = {d["公司代號"]: d["公司簡稱"] for d in data if "公司代號" in d}
+        print(f"  → 股票名稱載入：{len(_STOCK_NAMES)} 檔")
+    except Exception as e:
+        print(f"  [warn] 股票名稱載入失敗: {e}", file=sys.stderr)
+
+def get_stock_name(stock_id):
+    if not _STOCK_NAMES:
+        load_stock_names()
+    return _STOCK_NAMES.get(stock_id, stock_id)
 
 def http_get(url):
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
@@ -376,6 +388,10 @@ def run():
     today_str = datetime.today().strftime("%Y-%m-%d")
     print(f"\n=== 台股全市場策略篩選 {today_str} ===\n")
 
+    # ── 預載股票名稱（TWSE 一次取全部，不需 token）──────────────
+    print("預載股票名稱...")
+    load_stock_names()
+
     # ── 0. 期貨訊號（Playwright）────────────────────────────────
     print("Step 0: 爬 TAIFEX 期貨未平倉...")
     try:
@@ -424,7 +440,6 @@ def run():
 
     for r in hot + horses:
         r["name"] = get_stock_name(r["id"])
-        time.sleep(0.2)
 
     # ── 推播 1：市場方向訊號 ─────────────────────────────────────
     if futures:
