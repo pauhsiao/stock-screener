@@ -275,6 +275,14 @@ def generate_chart(stock_id: str, stock_name: str) -> str | None:
         vols   = [float(p["Trading_Volume"]) for p in prices[-30:]]
 
         xs = list(range(len(dates)))
+        # 安裝中文字型（Linux CI 環境）
+        import subprocess, shutil
+        if not shutil.which("fc-list") or "Noto" not in subprocess.getoutput("fc-list | grep -i noto"):
+            subprocess.run(["apt-get", "install", "-y", "-q", "fonts-noto-cjk"],
+                           capture_output=True)
+        plt.rcParams["font.family"] = ["Noto Sans CJK TC", "Noto Sans CJK",
+                                        "DejaVu Sans", "sans-serif"]
+
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 5),
                                         gridspec_kw={"height_ratios": [3, 1]},
                                         facecolor="#1a1a2e")

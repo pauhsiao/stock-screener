@@ -27,8 +27,10 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Install Playwright Chromium
-        run: python -m playwright install chromium --with-deps
+      - name: Install system fonts and Playwright Chromium
+        run: |
+          sudo apt-get install -y -q fonts-noto-cjk
+          python -m playwright install chromium --with-deps
 
       - name: Run screener
         env:
